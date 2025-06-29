@@ -270,6 +270,8 @@ BOOL ReadFileFromDisk(IN LPCSTR cFileName, OUT PBYTE* ppBuffer, OUT PDWORD pdwFi
 		goto _FUNC_CLEANUP;
 	}
 
+	// Locate the payload 
+
 
 	if (!Decryption(pBufer, dwFileSize, Key, IV, (PVOID*)ppBuffer, pdwFileSize)) {
 		PRINT_WINAPI_ERR("Decryption");
